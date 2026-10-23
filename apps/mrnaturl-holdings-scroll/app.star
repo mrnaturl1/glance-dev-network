@@ -3,8 +3,8 @@
 # it reports, then its next report date, before the open (AM) or after the
 # close (PM), and the EPS estimate.
 #
-# The pick list holds every US company that reported earnings in the past
-# year; type a ticker or name in the Glance app to search it.
+# Type the tickers in the Glance app settings, separated by commas or
+# spaces. Any US company that reports earnings works.
 #
 # Data comes from MrNaturl's own static feed at /api/holdings/<letter>.json,
 # rebuilt several times a day from Nasdaq's public earnings calendar and
@@ -33,18 +33,21 @@ ROTATE_SECONDS = 600
 # --- the picked stocks -------------------------------------------------------
 
 def picked(ctx):
-    # A selection arrives as a list or as a comma separated string. Each
-    # choice reads "TICKER NAME"; the ticker is the first word.
+    # Tickers typed in settings, separated by commas or spaces, for example
+    # "AAPL, MSFT ACLS". A list (from an older pick list setting) also works;
+    # each item's first word is the ticker.
     raw = ctx.inputs.get("stocks", "")
-    items = raw if type(raw) == "list" else str(raw).split(",")
+    items = raw if type(raw) == "list" else [str(raw)]
     out = []
     for item in items:
-        words = str(item).strip().split(" ")
-        if len(words) == 0 or words[0] == "":
-            continue
-        sym = words[0].upper()
-        if sym not in [p[0] for p in out]:
-            out.append((sym, " ".join(words[1:])))
+        text = str(item).replace(",", " ").replace(";", " ").replace("$", "")
+        words = text.split()
+        if type(raw) == "list":
+            words = words[:1]
+        for w in words:
+            sym = w.strip().upper()
+            if sym not in [p[0] for p in out]:
+                out.append((sym, ""))
     return out
 
 def letter(sym):
@@ -180,8 +183,13 @@ def row_small(c, r, y):
         col = result_color(r)
         word = "BEAT" if r.get("b", True) else "MISS"
         c.text(word, 63, y, font = "4x5", color = col, align = "right")
-        c.text(r.get("d", ""), 63 - c.text_width(word, "4x5") - 5, y,
-               font = "4x5", color = DIM, align = "right")
+        # The date goes between the ticker and BEAT/MISS when it fits; a long
+        # ticker would run into it, so then it's left off.
+        left = 1 + c.text_width(r.get("s", ""), "4x5") + 2
+        right = 63 - c.text_width(word, "4x5") - 2
+        d = r.get("d", "")
+        if right - left + 1 >= c.text_width(d, "4x5"):
+            c.text(d, right, y, font = "4x5", color = DIM, align = "right")
         c.text(r["a"], 1, y + 6, font = "4x5", color = col)
         c.text(r.get("p", ""), 63, y + 6, font = "4x5", color = col,
                align = "right")
@@ -211,9 +219,9 @@ def draw_page(c, ctx, page):
     stocks = picked(ctx)
     if len(stocks) == 0:
         if wide(c):
-            draw_message(c, "PICK YOUR STOCKS", "IN THE GLANCE APP SETTINGS")
+            draw_message(c, "TYPE YOUR TICKERS", "IN THE GLANCE APP SETTINGS")
         else:
-            draw_message(c, "PICK STOCKS", "IN SETTINGS")
+            draw_message(c, "ADD TICKERS", "IN SETTINGS")
         return
     results, upcoming, ok = load_rows(stocks)
     if not ok:
